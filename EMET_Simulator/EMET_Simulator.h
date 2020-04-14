@@ -1,11 +1,9 @@
 #pragma once
 #include "struct.h"
 
-typedef enum _SECTION_INHERIT
-{
-    ViewShare = 1,
-    ViewUnmap = 2
-} SECTION_INHERIT;
+#define PE32 0x10B
+#define PE64 0x20B
+   
 
 
 typedef DWORD (NTAPI *NTUNMAPVIEWOFSECTION)(
@@ -68,3 +66,13 @@ BOOL IsDllDynamicBase(PVOID BaseAddr);
 DWORD MandatoryASLR(PHOOKINFO hookInfo);
 DWORD  CheckStack(PEXCEPTION_POINTERS ExceptionInfo);
 LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
+DWORD LockGlobalInfo();
+DWORD UnLockGlobalInfo();
+void EAF_PLUS(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProt, HMODULE hModuleBase);
+BOOL IsUNCPath(LPCSTR pszPath);
+BOOL MatchStr(PCSTR pszDllName, PCSTR pszDllFormat);
+BOOL InitializeFuncInfo(UNION_HOOKEDFUNCINFO::PUNKNOWN_INFO a1, int API_index, int API_argAddr);
+BOOL MemProt(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProtStruct);
+BOOL LoadLib(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pLoadLibInfo, PHOOKINFO pHookInfo);
+BOOL ASR(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pStrucASR);
+typedef DWORD(__stdcall *HOOKDISPATCHER)(PHOOKINFO hookInfo);
