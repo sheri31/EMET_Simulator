@@ -1,6 +1,7 @@
 # EMET_Simulator
-Simulate EMET
-Function:  
+模拟EMET功能实现
+
+功能:  
   &nbsp;DEP  
   &nbsp;SEHOP  
   &nbsp;NullPage  
@@ -14,5 +15,7 @@ Function:
   &nbsp;SimExecFlow(0%)  
   &nbsp;StackPivot  
   &nbsp;ASR(50%)  
+  
+功能具体表述见 EMET 5.52 User Guide.pdf  
 
 
