@@ -49,14 +49,15 @@ DWORD (NTAPI *NTPROTECTVIRTUALMEMORY)(
     _Out_ PULONG OldProtect
 );
 
-
-void SplitStringForDllAndFunc(const char *pszPath, char *pszDllName, char *pszFuncName);
+typedef DWORD(__stdcall *HOOKDISPATCHER)(PHOOKINFO hookInfo);
 
 void __declspec(dllexport) Proxy_HookDispatcherPtr(PHOOKINFO hookInfo);
-DWORD HookDispatcher(PHOOKINFO hookInfo);
 void __declspec(dllexport) HookFunctions();
+
+DWORD HookDispatcher(PHOOKINFO hookInfo);
 DWORD Proxy_ApiCaller(int nApiArgCount, DWORD pApiArgv, DWORD pTrueApiAddr);
 void HookCurFunction(int nIndex);
+void SplitStringForDllAndFunc(const char *pszPath, char *pszDllName, char *pszFuncName);
 DWORD NullPage();
 DWORD HeapSpray();
 DWORD BottomUpASLR();
@@ -68,11 +69,14 @@ DWORD  CheckStack(PEXCEPTION_POINTERS ExceptionInfo);
 LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS ExceptionInfo);
 DWORD LockGlobalInfo();
 DWORD UnLockGlobalInfo();
-void EAF_PLUS(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProt, HMODULE hModuleBase);
+void EAF_PLUS(UNION_HOOKEDFUNCINFO::PEAFP_INFO pMemProt, HMODULE hModuleBase);
 BOOL IsUNCPath(LPCSTR pszPath);
 BOOL MatchStr(PCSTR pszDllName, PCSTR pszDllFormat);
 BOOL InitializeFuncInfo(UNION_HOOKEDFUNCINFO::PUNKNOWN_INFO a1, int API_index, int API_argAddr);
 BOOL MemProt(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProtStruct);
 BOOL LoadLib(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pLoadLibInfo, PHOOKINFO pHookInfo);
 BOOL ASR(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pStrucASR);
-typedef DWORD(__stdcall *HOOKDISPATCHER)(PHOOKINFO hookInfo);
+void InitializeEMET();
+LONG EAF_Handler(PEXCEPTION_POINTERS pExceptionInfo);
+BOOL CheckExceptAddrAndSEH(PEXCEPTION_RECORD pExceptionRecord);
+HMODULE proxy_GetModuleHandleExW(PVOID lpAddrInModule);

@@ -3,6 +3,8 @@
 typedef struct DLL_BASE_SIZE {
     DWORD dwBase;
     DWORD dwSize;
+    DWORD dwProt;
+    DWORD dwDllName;
 }DLL_BASE_SIZE, *PDLL_BASE_SIZE;
 
 union UNION_HOOKEDFUNCINFO
@@ -56,12 +58,12 @@ typedef struct EAF_DLLINFO {
 }EAF_DLLINFO, *PEAF_DLLINFO;
 
 
-typedef struct EAFPLUS_MODULEINFO {
+typedef struct MODULEINFO {
     DWORD dwModuleBase;
     DWORD dwModuleSize;
     DWORD dwProtect;
     DWORD dwModuleName;
-}EAFPLUS_MODULEINFO, *PEAFPLUS_MODULEINFO;
+}MODULEINFO, *PMODULEINFO;
 
 typedef struct HOOKINFO {
     DWORD dwedi;
@@ -103,18 +105,16 @@ typedef struct GLOBALINFO {
     BYTE MemProt;
     BYTE LoadLib;
     BYTE StackPivot;
-
     PVOID pNtdllKiUserExceptionDispatcher;
     DWORD HeapSprayAddrTable[14];
-    EAF_DLLINFO EafDllInfo[3];
+    EAF_DLLINFO EafDllInfo[4];
     DWORD dwBaseAddrEMET;
     DWORD dwSizeEMET;
-    DLL_BASE_SIZE SystemDllInfo[12];
     PCSTR pszASRCheckedDllNameAry[20];
-
     PVOID hExceptionHandler;
     HANDLE hVEH;
-    EAFPLUS_MODULEINFO EafPlus_APIInfo[8];
+    MODULEINFO SystemDllInfo[12];
+    PMODULEINFO SystemDllInfo_EAFPlus;
 }GLOBALINFO, *PGLOBALINFO;
 
 typedef struct GLOBALINFOLOCK {

@@ -655,7 +655,6 @@ DWORD EAF() {
         SIZE_T RegionSize = pDllInfo->dwSize;
 
         if (BaseAddr) {
-
             dwRet = pNtProtectVirtualMemory(GetCurrentProcess(), &BaseAddr, &RegionSize, PAGE_GUARD | PAGE_EXECUTE_READ, &RegionSize);
         }
     }
@@ -674,8 +673,9 @@ LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS pExceptionInfo)
     if (dwExceptionCode == STATUS_ACCESS_VIOLATION && pExceptionRecord->NumberParameters == 2) {
         if (dwExceptionAddress - g_Info.dwBaseAddrEMET >= g_Info.dwSizeEMET) {
             if (g_Info.MandatoryASLR && pExceptionRecord->ExceptionInformation[1] == dwExceptionAddress) {
+                
                 //judge
-//
+
             }
 
             if (g_Info.HeapSpray) {
@@ -699,8 +699,8 @@ LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS pExceptionInfo)
 
                 MEMORY_BASIC_INFORMATION MemInfo;
                 if (VirtualQuery((LPCVOID)dwExceptionAddress, &MemInfo, sizeof(MemInfo))) {
-                    if (MemInfo.Protect & PAGE_NOACCESS != 0 &&
-                        MemInfo.State & MEM_COMMIT == 0) {
+                    if ((MemInfo.Protect & PAGE_NOACCESS) != 0 &&
+                        (MemInfo.State & MEM_COMMIT) == 0) {
                         if (dwExceptionAddress != (dwExceptionAddress & 0xFFFF0000) ||
                             *(DWORD*)dwExceptionAddress != 0xC3 ||
                             *(DWORD*)(dwExceptionAddress + 4) ||
@@ -756,8 +756,8 @@ LONG EAF_Handler(PEXCEPTION_POINTERS pExceptionInfo) {
                 CheckStack(pExceptionInfo);
                 int nMaxIndexDll = sizeof(g_Info.SystemDllInfo) / sizeof(g_Info.SystemDllInfo[0]);
                 for (nIndexDll = 0; nIndexDll < nMaxIndexDll; nIndexDll++) {
-                    PDLL_BASE_SIZE pSysDllInfo = &g_Info.SystemDllInfo[nIndexDll];
-                    if (pSysDllInfo != 0 && dwEip - pSysDllInfo->dwBase <= pSysDllInfo->dwSize) {
+                    PMODULEINFO pSysDllInfo = &g_Info.SystemDllInfo[nIndexDll];
+                    if (pSysDllInfo != 0 && dwEip - pSysDllInfo->dwModuleBase <= pSysDllInfo->dwModuleSize) {
                         break;
                     }
                 }
@@ -860,7 +860,7 @@ LONG EAF_Handler(PEXCEPTION_POINTERS pExceptionInfo) {
 }
 
 
-DWORD  CheckStack(PEXCEPTION_POINTERS ExceptionInfo) {
+DWORD CheckStack(PEXCEPTION_POINTERS ExceptionInfo) {
     DWORD dwTEB = (DWORD)NtCurrentTeb();
     DWORD dwStackBase = *(DWORD*)(dwTEB + 4);
     DWORD dwStackLimit = *(DWORD*)(dwTEB + 8);
@@ -888,7 +888,7 @@ void EAF_PLUS(UNION_HOOKEDFUNCINFO::PEAFP_INFO pMemProt, HMODULE hModuleBase) {
             }
 
             for (int i = 0; i < 8; i++) {
-                PEAFPLUS_MODULEINFO pEafPlus = &g_Info.EafPlus_APIInfo[i];
+                PMODULEINFO pEafPlus = g_Info.SystemDllInfo_EAFPlus;
                 DWORD dwModuleName = pEafPlus->dwModuleName;
                 DWORD dwModuleBase = pEafPlus->dwModuleBase;
                 DWORD dwModuleSize = pEafPlus->dwModuleSize;
@@ -966,8 +966,6 @@ DWORD UnLockGlobalInfo() {
 
 
 /*
-
-
     ret: 是否需要继续检查
 */
 BOOL InitializeFuncInfo(UNION_HOOKEDFUNCINFO::PUNKNOWN_INFO a1, int API_index, int API_argAddr) {
@@ -1095,6 +1093,62 @@ BOOL InitializeFuncInfo(UNION_HOOKEDFUNCINFO::PUNKNOWN_INFO a1, int API_index, i
 
 
 void InitializeEMET() {
+    int nIndex = 0;
+    //init pNtdllKiUserExceptionDispatcher
+    g_Info.pNtdllKiUserExceptionDispatcher = GetProcAddress(GetModuleHandle("ntdll"), "KiUserExceptionDispatcher");
+
+
+    //init HeapSprayAddrTable
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x0A040A04;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x0A0A0A0A;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x0B0B0B0B;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x0C0C0C0C;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x0D0D0D0D;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x0E0E0E0E;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x04040404;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x05050505;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x06060606;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x07070707;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x08080808;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x09090909;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x20202020;
+    g_Info.HeapSprayAddrTable[nIndex++] = 0x14141414;
+
+    //init EafDllInfo
+    //g_Info.EafDllInfo[0].dwPageAddrOfEAT = ;
+
+
+    g_Info.dwBaseAddrEMET = (DWORD)GetModuleHandle("EMET_Simulator");
+    g_Info.dwSizeEMET = GetModuleSize((PVOID)g_Info.dwBaseAddrEMET);
+
+
+    //init SystemDllInfo
+    nIndex = 0;
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"ntdll.dll";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"kernelbase.dll";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"kernel32.dll";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)NULL;
+
+    g_Info.SystemDllInfo_EAFPlus = &g_Info.SystemDllInfo[nIndex];
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"mshtml.dll";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"flash*.ocx";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"jscript*.dll";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"vbscript.dll";
+    g_Info.SystemDllInfo[nIndex++].dwModuleName = (DWORD)"vgx.dll";
+    
+
+    //init pszASRCheckedDllNameAry
+    nIndex = 0;
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "npjpi*.dll";
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "jp2iexp.dll";
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "vgx.dll";
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "msxml4*.dll";
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "wshom.ocx";
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "scrrun.dll";
+    g_Info.pszASRCheckedDllNameAry[nIndex++] = "vbscript.dll";
+
+
+
 
 }
 
