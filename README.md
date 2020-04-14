@@ -1,16 +1,16 @@
 # EMET_Simulator
 Simulate EMET
-Function:
-  DEP
-  SEHOP
-  NullPage
-  HeapSpray
-  EAF
-  MandatoryASLR
-  BottomUpASLR
-  LoadLib
-  MemProt
-  Caller(0%)
-  SimExecFlow(0%)
-  StackPivot
-  ASR(50%)
+Function:  
+  &nbsp;DEP  
+  &nbsp;SEHOP  
+  &nbsp;NullPage  
+  &nbsp;HeapSpray  
+  &nbsp;EAF  
+  &nbsp;MandatoryASLR  
+  &nbsp;BottomUpASLR  
+  &nbsp;LoadLib  
+  &nbsp;MemProt  
+  &nbsp;Caller(0%)  
+  &nbsp;SimExecFlow(0%)  
+  &nbsp;&nbsp;StackPivot  
+  &nbsp;ASR(50%)  
