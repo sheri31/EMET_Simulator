@@ -7,6 +7,7 @@
   &nbsp;NullPage  
   &nbsp;HeapSpray  
   &nbsp;EAF  
+  &nbsp;EAF+    
   &nbsp;MandatoryASLR  
   &nbsp;BottomUpASLR  
   &nbsp;LoadLib  
