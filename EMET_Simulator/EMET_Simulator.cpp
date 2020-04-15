@@ -5,9 +5,13 @@
 #include "EMET_Simulator.h"
 #include "Decode2Asm.h"
 
-
-GLOBALINFO g_Info;
-GLOBALINFOLOCK g_Infowithlock;
+#define CALL_TYPE 6
+#define DLLMAX 10
+REGINFO g_RegInfo[DLLMAX] = { 0 };
+DWORD g_CallInstructionLen[CALL_TYPE] = {6, 5, 2, 3, 7, 4};
+GLOBALINFO g_Info = {0};
+PGLOBALHOOKINFO g_HookedApiInfo = NULL;
+GLOBALINFOLOCK g_Infowithlock = {0};
 NTPROTECTVIRTUALMEMORY pNtProtectVirtualMemory = (NTPROTECTVIRTUALMEMORY)GetProcAddress(GetModuleHandle("ntdll.dll"), "NtProtectVirtualMemory");
 BYTE g_CodeOriginalSEH[] = { 0x8B, 0xFF, 0x55, 0x8B, 0xEC, 0xFF, 0x75, 0x14,
     0xFF, 0x75, 0x10, 0xFF, 0x75, 0x0C, 0xFF, 0x75, 0x08 };
@@ -27,8 +31,6 @@ BYTE g_hookShellCode[] = {
 
 };
 
-#define DLLMAX 10
-REGINFO g_RegInfo[DLLMAX] = { 0 };
 
 //不要打乱顺序
 struct FUNCINFO g_hookedFuncInfo[] = {
@@ -196,8 +198,13 @@ DWORD HookDispatcher(PHOOKINFO pHookInfo) {
             MemProt((UNION_HOOKEDFUNCINFO::PMEMPROT_INFO)&FuncInfo);
         }
 
-        if (0) {
-            //caller  SimExecFlow
+        if (dwApiMask & 0x400 && g_Info.Caller) {
+            Caller()
+
+        }
+
+        if (dwApiMask & 0x1000 && g_Info.SimExecFlow) {
+            //  SimExecFlow
         }
 
         if (dwApiMask & 4 && g_Info.LoadLib != 0) {
@@ -317,6 +324,13 @@ void HookCurFunction(int nIndex) {
     *(DWORD*)((BYTE*)pProc + 1) = (DWORD)phookShellCode - ((DWORD)pProc + 5);
     VirtualProtect(pProc, 5, dwOldProctect, &dwOldProctect);
 
+    g_HookedApiInfo[nIndex].dwApiIndex = nIndex;
+    g_HookedApiInfo[nIndex].dwArgCount = pCur->nFuncArgc;
+    g_HookedApiInfo[nIndex].dwTrueApiAddr = (DWORD)pApiHeadCode;
+    g_HookedApiInfo[nIndex].dwOriginalApiAddr = (DWORD)pProc;
+    g_HookedApiInfo[nIndex].dwHookAddr = (DWORD)phookShellCode;
+
+
 END:
     delete pszFunName;
     delete pszDllName;
@@ -407,8 +421,17 @@ BOOL MemProt(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProtStruct) {
 }
 
 
-BOOL Caller() {
+BOOL Caller(PHOOKINFO pHookInfo) {
 
+    for (int i = 0; i < CALL_TYPE; i++) {
+        
+        do {
+            Decode2Asm((PBYTE)dwDisAsmAddr, szASM, &uCodeSize, (UINT)dwDisAsmAddr);
+            nHookedBytes += uCodeSize;
+            dwDisAsmAddr += uCodeSize;
+        } while (nHookedBytes < 5);
+
+    }
 
     return 0;
 }
@@ -1094,6 +1117,9 @@ BOOL InitializeFuncInfo(UNION_HOOKEDFUNCINFO::PUNKNOWN_INFO a1, int API_index, i
 
 void InitializeEMET() {
     int nIndex = 0;
+
+    g_HookedApiInfo = new GLOBALHOOKINFO[sizeof(g_hookedFuncInfo) / sizeof(g_hookedFuncInfo[0])];
+
     //init pNtdllKiUserExceptionDispatcher
     g_Info.pNtdllKiUserExceptionDispatcher = GetProcAddress(GetModuleHandle("ntdll"), "KiUserExceptionDispatcher");
 

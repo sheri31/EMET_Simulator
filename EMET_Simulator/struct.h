@@ -153,3 +153,13 @@ typedef struct _REGINGO {
     DWORD dwEsp1_LastRecover;
     DWORD dwEip1_LastRecover;
 }REGINFO, *PREGINFO;
+
+
+
+typedef struct GLOBALHOOKINFO {
+    DWORD dwOriginalApiAddr;
+    DWORD dwHookAddr;
+    DWORD dwTrueApiAddr;
+    DWORD dwApiIndex;
+    DWORD dwArgCount;
+}GLOBALHOOKINFO, *PGLOBALHOOKINFO;
