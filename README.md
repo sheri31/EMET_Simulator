@@ -12,10 +12,10 @@
   &nbsp;BottomUpASLR  
   &nbsp;LoadLib  
   &nbsp;MemProt  
-  &nbsp;Caller(0%)  
-  &nbsp;SimExecFlow(0%)  
+  &nbsp;Caller
+  &nbsp;SimExecFlow(未完成)  
   &nbsp;StackPivot  
-  &nbsp;ASR(50%)  
+  &nbsp;ASR
   
 功能具体表述见 EMET 5.52 User Guide.pdf  
 
