@@ -50,10 +50,11 @@ DWORD (NTAPI *NTPROTECTVIRTUALMEMORY)(
 );
 
 typedef DWORD(__stdcall *HOOKDISPATCHER)(PHOOKINFO hookInfo);
+typedef HRESULT (__stdcall *OBJECTFROMLRESULT)(LRESULT lResult, REFIID riid, WPARAM wParam, void **ppvObject);
 
-void __declspec(dllexport) Proxy_HookDispatcherPtr(PHOOKINFO hookInfo);
-void __declspec(dllexport) HookFunctions();
 
+void  Proxy_HookDispatcherPtr(PHOOKINFO hookInfo);
+void  HookFunctions();
 DWORD HookDispatcher(PHOOKINFO hookInfo);
 DWORD Proxy_ApiCaller(int nApiArgCount, DWORD pApiArgv, DWORD pTrueApiAddr);
 void HookCurFunction(int nIndex);
@@ -80,3 +81,5 @@ void InitializeEMET();
 LONG EAF_Handler(PEXCEPTION_POINTERS pExceptionInfo);
 BOOL CheckExceptAddrAndSEH(PEXCEPTION_RECORD pExceptionRecord);
 HMODULE proxy_GetModuleHandleExW(PVOID lpAddrInModule);
+DWORD ErrorReport();
+BOOL Caller(PHOOKINFO pHookInfo);

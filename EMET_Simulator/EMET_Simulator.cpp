@@ -4,6 +4,10 @@
 #include "stdafx.h"
 #include "EMET_Simulator.h"
 #include "Decode2Asm.h"
+#include <atlbase.h>
+#include <oleacc.h>
+#include <mshtml.h>
+
 
 #define CALL_TYPE 6
 #define DLLMAX 10
@@ -106,7 +110,7 @@ HMODULE proxy_GetModuleHandleEx(LPCSTR lpModuleName) {
     return 0;
 }
 
-void __declspec(dllexport) Proxy_HookDispatcherPtr(PHOOKINFO hookInfo) {
+void  Proxy_HookDispatcherPtr(PHOOKINFO hookInfo) {
     hookInfo->dwArgAddr = (DWORD)&hookInfo->ApiArg;
     hookInfo->dwEax = ((HOOKDISPATCHER)hookInfo->pHookDispatcher)(hookInfo);
     return;
@@ -199,8 +203,7 @@ DWORD HookDispatcher(PHOOKINFO pHookInfo) {
         }
 
         if (dwApiMask & 0x400 && g_Info.Caller) {
-            Caller()
-
+            Caller(pHookInfo);
         }
 
         if (dwApiMask & 0x1000 && g_Info.SimExecFlow) {
@@ -229,12 +232,12 @@ DWORD HookDispatcher(PHOOKINFO pHookInfo) {
                 if (pVEH_EMET != 0) {
                     RemoveVectoredExceptionHandler(g_Info.hExceptionHandler);
                     g_Info.hExceptionHandler = pVEH_EMET;
-
                 }
                 else {
                     RemoveVectoredExceptionHandler(pVEH);
                     TerminateProcess(GetCurrentProcess(), -1);
                 }
+
                 LockGlobalInfo();
                 g_Info.hVEH = pVEH_EMET;
                 UnLockGlobalInfo();
@@ -243,10 +246,8 @@ DWORD HookDispatcher(PHOOKINFO pHookInfo) {
     }
 
     if (dwApiMask & 0x10000 && g_Info.EAF_plus) {
-
         HMODULE hModule = (HMODULE)dwApiRet;
         EAF_PLUS((UNION_HOOKEDFUNCINFO::PEAFP_INFO)&FuncInfo, hModule);
-
     }
 
     return dwApiRet;
@@ -256,6 +257,7 @@ void HookFunctions() {
     for (int i = 0; i < sizeof(g_hookedFuncInfo) / sizeof(g_hookedFuncInfo[0]); i++) {
         HookCurFunction(i);
     }
+
     return;
 }
 
@@ -298,8 +300,6 @@ void HookCurFunction(int nIndex) {
         dwDisAsmAddr += uCodeSize;
     } while (nHookedBytes < 5);
 
-
-
     pApiHeadCode = new BYTE[nHookedBytes + 5];
     pApiHeadCode[nHookedBytes] = 0xE9;
     *(DWORD*)&pApiHeadCode[nHookedBytes + 1] = (DWORD)pProc + nHookedBytes - (DWORD)(pApiHeadCode + nHookedBytes + 5);
@@ -316,9 +316,6 @@ void HookCurFunction(int nIndex) {
     *(DWORD*)&phookShellCode[24] = (DWORD)Proxy_HookDispatcherPtr - (DWORD)&phookShellCode[23 + 5];
     *(DWORD*)&phookShellCode[33] = pCur->nFuncArgc * 4;
 
-
-
-
     VirtualProtect(pProc, 5, PAGE_EXECUTE_READWRITE, &dwOldProctect);
     *((BYTE*)pProc) = 0xE9;
     *(DWORD*)((BYTE*)pProc + 1) = (DWORD)phookShellCode - ((DWORD)pProc + 5);
@@ -330,7 +327,6 @@ void HookCurFunction(int nIndex) {
     g_HookedApiInfo[nIndex].dwOriginalApiAddr = (DWORD)pProc;
     g_HookedApiInfo[nIndex].dwHookAddr = (DWORD)phookShellCode;
 
-
 END:
     delete pszFunName;
     delete pszDllName;
@@ -341,7 +337,6 @@ void SplitStringForDllAndFunc(const char *pszPath, char *pszDllName, char *pszFu
     int nPathLen = strlen(pszPath);
     for (int i = 0; i < nPathLen; i++) {
         if (pszPath[i] == '.') {
-
             memcpy(pszDllName, pszPath, i);
             memcpy(pszFuncName, pszPath + i + 1, nPathLen - i - 1);
             break;
@@ -378,16 +373,13 @@ DWORD MandatoryASLR(PHOOKINFO hookInfo) {
 
 
 BOOL StackPivot(DWORD dwRetAddr, DWORD dwOriginalAPIAddr, PHOOKINFO hookInfo) {
-
     PNT_TIB pTib = (PNT_TIB)NtCurrentTeb();
     DWORD dwStackLimit = (DWORD)pTib->StackLimit;
     DWORD dwStackBase = (DWORD)pTib->StackBase;
 
     if (hookInfo->dwArgAddr > dwStackBase || hookInfo->dwArgAddr < dwStackLimit) {
-        //error
+        ErrorReport();
     }
-
-    //xxx
 
     return 0;
 }
@@ -407,6 +399,7 @@ BOOL MemProt(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProtStruct) {
             return TRUE;
         }
     }
+
     DWORD dwAddr = pMemProtStruct->dwAddress;
     DWORD teb = (DWORD)NtCurrentTeb();
     DWORD dwStackLimit = *(DWORD*)(teb + 8);
@@ -422,18 +415,25 @@ BOOL MemProt(UNION_HOOKEDFUNCINFO::PMEMPROT_INFO pMemProtStruct) {
 
 
 BOOL Caller(PHOOKINFO pHookInfo) {
-
     for (int i = 0; i < CALL_TYPE; i++) {
+        DWORD dwCallLen = g_CallInstructionLen[i];
+        DWORD dwDisAsmAddr = pHookInfo->dwRetAddr + dwCallLen;
+        UINT uCodeSize = 0;
+        char szASM[0x100] = { 0 };
+        Decode2Asm((PBYTE)dwDisAsmAddr, szASM, &uCodeSize, (UINT)dwDisAsmAddr);
         
-        do {
-            Decode2Asm((PBYTE)dwDisAsmAddr, szASM, &uCodeSize, (UINT)dwDisAsmAddr);
-            nHookedBytes += uCodeSize;
-            dwDisAsmAddr += uCodeSize;
-        } while (nHookedBytes < 5);
+        if (strstr(szASM, "call") != NULL) {
+            if (uCodeSize == i) {
+                break;
+            }
+        }
 
+        //指令不是call
+        ErrorReport();
+        return FALSE;
     }
 
-    return 0;
+    return TRUE;
 }
 
 //BOOL SimExecFlow() {
@@ -447,20 +447,151 @@ BOOL BannedFunctions() {
 }
 
 
-BOOL ASR_IsDLLInBlackList(PCSTR pszDllName) {
+int MatchClassName(HWND hWnd)
+{
+    int nLen = 0;
+    int nCmpResult = 0;
+    CHAR szwClassName[20] = { 0 };
+
+    nLen = GetClassName(hWnd, szwClassName, 0xB);
+    if (nLen == 9)
+    {
+        nCmpResult = strcmp(szwClassName, "Frame Tab");
+    }
+    else
+    {
+        if (nLen != 7)
+            return 0;
+        nCmpResult = strcmp(szwClassName, "IEFrame");
+    }
+
+    if (!nCmpResult) {
+        return 1;
+    }
+    return 0;
+}
+
+BOOL CALLBACK EnumSubWndFunc(HWND hWnd, LPARAM lParam)
+{
+    CHAR szClassName[26] = { 0 };
+
+    if (GetClassName(hWnd, szClassName, 26) == 24) {
+        if (strcmp(szClassName, "Internet Explorer_Server") == 0) {
+            if (GetWindowThreadProcessId(hWnd, 0) == GetCurrentThreadId()) {
+                *(DWORD*)lParam = (LPARAM)hWnd;
+                return FALSE;
+            }
+        }
+    }
+
+    return TRUE;
+}
+
+BOOL CALLBACK EnumWndFunc(HWND hWndParent, LPARAM lParam)
+{
+    *(DWORD*)lParam = 0;
+    if (MatchClassName(hWndParent)) {
+        EnumChildWindows(hWndParent, EnumSubWndFunc, lParam);
+    }
+
+    return *(DWORD*)lParam == 0;
+}
+
+
+HRESULT GetIHtmlDoc(HWND hWnd, IHTMLDocument2 **ppDoc)
+{
+    DWORD dwResult = 0;
+    UINT MsgID = RegisterWindowMessage("WM_HTML_GETOBJECT");
+    if (MsgID == 0) {
+        return NULL;
+    }
+
+    HMODULE hMod = LoadLibrary("oleacc.dll");
+    if (hMod == 0) {
+        return NULL;
+    }
+
+    PVOID pObjectFromLresult = GetProcAddress(hMod, "ObjectFromLresult");
+    if (pObjectFromLresult == NULL) {
+        return NULL;
+    }
+
+    SendMessageTimeoutW(hWnd, MsgID, 0, 0, 2u, 1000u, &dwResult);
+
+    return ((OBJECTFROMLRESULT)pObjectFromLresult)(dwResult, IID_IHTMLDocument2, 0, (void**)ppDoc);
+}
+
+
+IInternetSecurityManager* GetIInternetSecurityManager() {
+    IInternetSecurityManager *pSecurityManager = NULL;
+    HRESULT hResult = CoCreateInstance(CLSID_InternetSecurityManager, 0,
+        CLSCTX_INPROC_SERVER | CLSCTX_INPROC_HANDLER | CLSCTX_LOCAL_SERVER | CLSCTX_REMOTE_SERVER,
+        IID_IInternetSecurityManager, (LPVOID*)&pSecurityManager);
+
+    if (hResult == S_OK) {
+        return pSecurityManager;
+    }
+
+    return NULL;
+}
+
+DWORD CheckURLZone() {
+    HWND hWnd = 0;
+    EnumWindows(EnumWndFunc, (LPARAM)&hWnd);
+
+    if (hWnd != 0) {
+        IHTMLDocument2 *pDoc = NULL;
+        HRESULT hResult = GetIHtmlDoc(hWnd, &pDoc);
+        BSTR bstrURL;
+        if (hResult != S_OK) {
+            return 0;
+        }
+
+        IInternetSecurityManager *pSecurityManager = GetIInternetSecurityManager();
+        hResult = pDoc->get_URL(&bstrURL);
+        if (hResult != S_OK) {
+            return 0;
+        }
+
+        DWORD dwZone = 0;
+        pSecurityManager->MapUrlToZone(bstrURL, &dwZone, 0);
+        if (hResult != S_OK) {
+            return 0;
+        }
+
+        return dwZone;
+    }
+    return 0;
+}
+
+BOOL CheckDLLInBlackList(PCSTR pszDllName) {
+    BOOL bLoadValid = TRUE;
 
     for (int i = 0; i < sizeof(g_Info.pszASRCheckedDllNameAry) / sizeof(g_Info.pszASRCheckedDllNameAry[0]); i++) {
         if (MatchStr(pszDllName, g_Info.pszASRCheckedDllNameAry[i]) == TRUE) {
-            //match    save infomation
+            //match    
+            bLoadValid = FALSE;
             break;
         }
     }
 
-    return 0;
+    if (bLoadValid == FALSE) {
+        if (IsGUIThread(0) == TRUE) {
+            DWORD dwZone = CheckURLZone();
+            /*
+                Enum：URLZONE
+                EMET的实现中，可以为每个被保护的程序设置不同的排除检测Internet空间
+                如IE（排除检测两个空间本地Intetnet和可信站点），
+                bLoadValid = (dwZone == URLZONE_INTRANET ||dwZone == URLZONE_TRUSTED);
+            */
+        }
+    }
+
+    return bLoadValid;
 }
 
 
-BOOL ASR(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pStrucASR) {
+BOOL ASR(UNION_HOOKEDFUNCINFO::PASR_INFO pStrucASR) {
     char *pszDllName_alloc = NULL;
     char *pszDllName = NULL;
 
@@ -470,9 +601,7 @@ BOOL ASR(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pStrucASR) {
         return TRUE;
     }
 
-
     if (pStrucASR->dwIsWideVersion) {
-
         int nDLLnameLen = wcslen((const wchar_t *)pStrucASR->dwFileNamePtr);
         pszDllName_alloc = new char[wcslen((const wchar_t *)pStrucASR->dwFileNamePtr) + 1];
         WideCharToMultiByte(CP_ACP, 0, (LPCWCH)pStrucASR->dwFileNamePtr, -1, pszDllName_alloc, nDLLnameLen, NULL, NULL);
@@ -482,15 +611,14 @@ BOOL ASR(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pStrucASR) {
         pszDllName = (char*)pStrucASR->dwFileNamePtr;
     }
 
-    //BOOL bRet =
+    if (CheckDLLInBlackList(pszDllName) == FALSE) {
+        ErrorReport();
+    }
 
     if (pszDllName_alloc != NULL) {
         delete[] pszDllName_alloc;
     }
 
-    /*if () {
-
-    }*/
     return 0;
 }
 
@@ -504,6 +632,7 @@ BOOL DEP() {
         }
         bRet = SetProcessDEPPolicy(dwFlag);
     }
+
     return bRet;
 }
 
@@ -531,7 +660,7 @@ BOOL LoadLib(UNION_HOOKEDFUNCINFO::PLOADLIB_INFO pLoadLibInfo, PHOOKINFO pHookIn
         BOOL bRet = IsUNCPath((LPCSTR)pLoadLibInfo->dwFileNamePtr);
         if (bRet) {
             if (GetFileAttributes((LPCSTR)pLoadLibInfo->dwFileNamePtr) != INVALID_FILE_ATTRIBUTES) {
-                //error
+                ErrorReport();
                 return 1;
             }
         }
@@ -668,11 +797,8 @@ DWORD BottomUpASLR() {
 }
 
 DWORD EAF() {
-
     DWORD dwRet = 0;
-
     for (int i = 0; i < 3; i++) {
-
         PEAF_DLLINFO pDllInfo = &g_Info.EafDllInfo[i];
         PVOID BaseAddr = (PVOID)pDllInfo->dwPageAddrOfEAT;
         SIZE_T RegionSize = pDllInfo->dwSize;
@@ -696,21 +822,18 @@ LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS pExceptionInfo)
     if (dwExceptionCode == STATUS_ACCESS_VIOLATION && pExceptionRecord->NumberParameters == 2) {
         if (dwExceptionAddress - g_Info.dwBaseAddrEMET >= g_Info.dwSizeEMET) {
             if (g_Info.MandatoryASLR && pExceptionRecord->ExceptionInformation[1] == dwExceptionAddress) {
-                
                 //judge
-
             }
 
             if (g_Info.HeapSpray) {
                 DWORD dwAccessedAddrPage = pExceptionRecord->ExceptionInformation[1] & 0xFFFF0000;
-
                 for (int i = 0; g_Info.HeapSprayAddrTable[i] == 0; i++) {
                     if (dwAccessedAddrPage == (g_Info.HeapSprayAddrTable[i] & 0xFFFF0000)) {
                         if (CheckExceptAddrAndSEH(pExceptionRecord)) {
                             return 0;
                         }
                         else {
-                            //error
+                            ErrorReport();
                         }
                     }
                 }
@@ -731,7 +854,7 @@ LONG CALLBACK VectoredHandler(PEXCEPTION_POINTERS pExceptionInfo)
                             *(DWORD*)(dwExceptionAddress + 0xC)
                             ) {
 
-                            //error
+                            ErrorReport();
                         }
                     }
                 }
@@ -788,7 +911,7 @@ LONG EAF_Handler(PEXCEPTION_POINTERS pExceptionInfo) {
                 if (nIndexDll >= nMaxIndexDll) {
 
                     if (proxy_GetModuleHandleEx((LPCSTR)dwEip) == 0) {
-                        //error
+                        ErrorReport();
                     }
                 }
             }
@@ -889,7 +1012,7 @@ DWORD CheckStack(PEXCEPTION_POINTERS ExceptionInfo) {
     DWORD dwStackLimit = *(DWORD*)(dwTEB + 8);
     if (ExceptionInfo->ContextRecord->Esp < dwStackLimit ||
         ExceptionInfo->ContextRecord->Ebp > dwStackBase) {
-        //error
+        ErrorReport();
     }
 
     return 0;
@@ -1093,8 +1216,6 @@ BOOL InitializeFuncInfo(UNION_HOOKEDFUNCINFO::PUNKNOWN_INFO a1, int API_index, i
     }
     a1->dwType = 0;
 
-
-
     //判断是否需要继续检测
     if (a1->dwType > 0 && bNextCheck == TRUE) {
         if (a1->dwType == TYPE_MEMALLOC || a1->dwType == TYPE_MEMPROTECT) {
@@ -1173,9 +1294,6 @@ void InitializeEMET() {
     g_Info.pszASRCheckedDllNameAry[nIndex++] = "scrrun.dll";
     g_Info.pszASRCheckedDllNameAry[nIndex++] = "vbscript.dll";
 
-
-
-
 }
 
 
@@ -1218,4 +1336,11 @@ HMODULE proxy_GetModuleHandleExW(PVOID lpAddrInModule) {
 
     return 0;
 
+}
+
+DWORD ErrorReport(){
+
+    //MessageBoxA();
+    TerminateProcess(GetCurrentProcess(), -1);
+    return 0;
 }
